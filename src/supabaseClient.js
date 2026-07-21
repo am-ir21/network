@@ -1,8 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 
 const supabaseUrl = 'https://utlvhpajykxigudmrpsm.supabase.co'
-const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV0bHZocHhqeWt4aWd1ZG1ycHNtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Mzg4NDE5MTksImV4cCI6MjA1NDQxNzkxOX0.vP6m3bC5Zk1Wz7v2L5N4M9X8J1K2L3M4N5O6P7Q8R9S'
-
+const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV0bHZocGFqeWt4aWd1ZG1ycHNtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM4ODQ1NTksImV4cCI6MjA5OTQ2MDU1OX0.tDzsugraIPx2GRxBFwFud7iuDDBdwQcuhfFs7vWUN0U'
 if (!supabaseUrl || !supabaseAnonKey) {
   // eslint-disable-next-line no-console
   console.warn(
