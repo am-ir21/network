@@ -1,13 +1,3 @@
--- =====================================================================
--- Subscription & Payment Tracking App — Full Schema
--- Run this entire script in the Supabase SQL Editor.
--- NOTE: This uses a custom "users" table instead of Supabase Auth,
--- with plaintext passwords, by explicit design request. RLS is disabled
--- and all authorization is enforced in the frontend. Do NOT expose the
--- anon key beyond a trusted internal tool — this schema is intentionally
--- insecure for maximum simplicity and is not suitable for a public app.
--- =====================================================================
-
 -- 1. CLEAN SLATE ------------------------------------------------------
 DROP TABLE IF EXISTS payment_history CASCADE;
 DROP TABLE IF EXISTS subscribers CASCADE;
@@ -95,8 +85,6 @@ FOR EACH ROW
 EXECUTE FUNCTION apply_payment();
 
 -- 5. FUNCTION: undo a payment --------------------------------------------
--- Reverts the subscriber's paid_amount/status back to what they were
--- before the given payment_history row, then deletes that row.
 
 CREATE OR REPLACE FUNCTION undo_payment(p_payment_id uuid)
 RETURNS void AS $$
