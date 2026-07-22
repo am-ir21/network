@@ -24,7 +24,7 @@ const STATUS_STYLES = {
   },
 }
 
-export default function SubscriberList({ subscribers, setSubscribers, onPaymentRecorded }) {
+export default function SubscriberList({ subscribers, setSubscribers, payments, onPaymentRecorded }) {
   const { t } = useLanguage()
   const { isAdmin } = useAuth()
   const [search, setSearch] = useState('')
@@ -33,6 +33,17 @@ export default function SubscriberList({ subscribers, setSubscribers, onPaymentR
   const [deletingId, setDeletingId] = useState(null)
   // Map of subscriberId -> { id, paymentRecordId, subscriberId, createdAt }
   const [activeUndos, setActiveUndos] = useState({})
+
+  const paymentTimeMap = useMemo(() => {
+    const map = {}
+    for (const p of payments ?? []) {
+      const existing = map[p.subscriber_id]
+      if (!existing || new Date(p.received_at) > new Date(existing)) {
+        map[p.subscriber_id] = p.received_at
+      }
+    }
+    return map
+  }, [payments])
 
   const filtered = useMemo(() => {
     return subscribers.filter((s) => {
@@ -141,13 +152,14 @@ export default function SubscriberList({ subscribers, setSubscribers, onPaymentR
                 <th className="px-4 py-3 text-start font-semibold text-slate-500 dark:text-slate-400">{t('paid')}</th>
                 <th className="px-4 py-3 text-start font-semibold text-slate-500 dark:text-slate-400">{t('remaining')}</th>
                 <th className="px-4 py-3 text-start font-semibold text-slate-500 dark:text-slate-400">{t('status')}</th>
+                <th className="px-4 py-3 text-start font-semibold text-slate-500 dark:text-slate-400 whitespace-nowrap">{t('receivedTime')}</th>
                 <th className="px-4 py-3 text-start font-semibold text-slate-500 dark:text-slate-400">{t('actions')}</th>
               </tr>
             </thead>
             <tbody>
               {filtered.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="px-4 py-8 text-center text-slate-400">
+                  <td colSpan={7} className="px-4 py-8 text-center text-slate-400">
                     {t('noResults')}
                   </td>
                 </tr>
@@ -167,6 +179,18 @@ export default function SubscriberList({ subscribers, setSubscribers, onPaymentR
                         <span className={`h-1.5 w-1.5 rounded-full ${style.dot}`} />
                         {statusLabel(s.status)}
                       </span>
+                    </td>
+                    <td className="px-4 py-3 text-slate-500 dark:text-slate-400 whitespace-nowrap text-xs">
+                      {paymentTimeMap[s.id]
+                        ? new Date(paymentTimeMap[s.id]).toLocaleString(undefined, {
+                            year: 'numeric',
+                            month: 'short',
+                            day: '2-digit',
+                            hour: '2-digit',
+                            minute: '2-digit',
+                            hour12: false,
+                          })
+                        : '—'}
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2 flex-wrap">

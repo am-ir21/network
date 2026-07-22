@@ -81,6 +81,7 @@ export default function App() {
           <SubscriberList
             subscribers={subscribers}
             setSubscribers={setSubscribers}
+            payments={todaysPayments}
             onPaymentRecorded={handlePaymentRecorded}
           />
         )}
