@@ -5,6 +5,14 @@ import { useLanguage } from '../context/LanguageContext'
 export default function Dashboard({ subscribers, todaysPayments }) {
   const { t } = useLanguage()
 
+  const subscriberMap = useMemo(() => {
+    const map = {}
+    for (const s of subscribers) {
+      map[s.id] = s.name
+    }
+    return map
+  }, [subscribers])
+
   const stats = useMemo(() => {
     const totalCollectedToday = todaysPayments.reduce((sum, p) => sum + Number(p.amount_paid), 0)
     const fullyPaid = subscribers.filter((s) => s.status === 'green').length
@@ -70,6 +78,36 @@ export default function Dashboard({ subscribers, todaysPayments }) {
             <p className="text-xl font-bold text-slate-900 dark:text-white">{c.value}</p>
           </div>
         ))}
+      </div>
+
+      <div className="mt-6">
+        <h3 className="text-base font-bold text-slate-900 dark:text-white mb-3">{t('paymentHistory')}</h3>
+        {todaysPayments.length === 0 ? (
+          <p className="text-sm text-slate-500 dark:text-slate-400">{t('noPayments')}</p>
+        ) : (
+          <div className="overflow-x-auto rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+                  <th className="px-4 py-2.5 text-left font-semibold">{t('subscriberName')}</th>
+                  <th className="px-4 py-2.5 text-left font-semibold">{t('amountPaid')}</th>
+                  <th className="px-4 py-2.5 text-left font-semibold">{t('receivedTime')}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {todaysPayments.map((p) => (
+                  <tr key={p.id} className="border-t border-slate-100 dark:border-slate-800">
+                    <td className="px-4 py-2.5 text-slate-900 dark:text-white">{subscriberMap[p.subscriber_id] ?? '—'}</td>
+                    <td className="px-4 py-2.5 text-slate-900 dark:text-white">{formatIQD(Number(p.amount_paid))}</td>
+                    <td className="px-4 py-2.5 text-slate-500 dark:text-slate-400">
+                      {p.received_at ? new Date(p.received_at).toLocaleString() : '—'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </div>
   )

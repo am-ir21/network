@@ -58,6 +58,11 @@ export const translations = {
     fillAllFields: 'Please fill in all fields',
     loading: 'Loading...',
     totalSubscribers: 'Total Subscribers',
+    paymentHistory: 'Payment History',
+    subscriberName: 'Subscriber',
+    amountPaid: 'Amount Paid',
+    receivedTime: 'Received Time',
+    noPayments: 'No payments recorded today.',
   },
   ar: {
     appName: 'سب تراك',
@@ -118,5 +123,10 @@ export const translations = {
     fillAllFields: 'يرجى تعبئة جميع الحقول',
     loading: 'جاري التحميل...',
     totalSubscribers: 'إجمالي المشتركين',
+    paymentHistory: 'سجل المدفوعات',
+    subscriberName: 'المشترك',
+    amountPaid: 'المبلغ المدفوع',
+    receivedTime: 'وقت الاستلام',
+    noPayments: 'لا توجد مدفوعات مسجلة اليوم.',
   },
 }
