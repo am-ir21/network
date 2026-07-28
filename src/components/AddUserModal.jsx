@@ -5,7 +5,6 @@ import { useLanguage } from '../context/LanguageContext'
 export default function AddUserModal({ onClose, onAdded }) {
   const { t } = useLanguage()
   const [username, setUsername] = useState('')
-  const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [role, setRole] = useState('data_entry')
   const [saving, setSaving] = useState(false)
@@ -13,7 +12,7 @@ export default function AddUserModal({ onClose, onAdded }) {
 
   const handleSubmit = async (e) => {
     e.preventDefault()
-    if (!username.trim() || !password || !email.trim()) {
+    if (!username.trim() || !password) {
       setError(t('fillAllFields'))
       return
     }
@@ -24,12 +23,11 @@ export default function AddUserModal({ onClose, onAdded }) {
         .from('users')
         .insert({
           username: username.trim(),
-          email: email.trim(),
           password,
           role,
           is_active: true,
         })
-        .select('id, username, email, role, is_active, last_login, created_at')
+        .select('id, username, role, is_active, last_login, created_at')
         .single()
 
       if (insertError) throw insertError
@@ -58,15 +56,6 @@ export default function AddUserModal({ onClose, onAdded }) {
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               autoFocus
-              className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-4 py-2.5 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-slate-600 dark:text-slate-300 mb-1">{t('email')}</label>
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
               className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-4 py-2.5 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
             />
           </div>

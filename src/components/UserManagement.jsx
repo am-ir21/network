@@ -30,7 +30,7 @@ export default function UserManagement() {
     setLoading(true)
     const { data, error } = await supabase
       .from('users')
-      .select('id, username, email, role, is_active, last_login, created_at')
+      .select('id, username, role, is_active, last_login, created_at')
       .order('created_at', { ascending: true })
     if (!error) setUsers(data || [])
     setLoading(false)
@@ -142,7 +142,6 @@ export default function UserManagement() {
               <thead>
                 <tr className="border-b border-slate-100 dark:border-slate-800">
                   <th className="px-4 py-3 text-start font-semibold text-slate-500 dark:text-slate-400">{t('usernameLabel')}</th>
-                  <th className="px-4 py-3 text-start font-semibold text-slate-500 dark:text-slate-400">{t('email')}</th>
                   <th className="px-4 py-3 text-start font-semibold text-slate-500 dark:text-slate-400">{t('role')}</th>
                   <th className="px-4 py-3 text-start font-semibold text-slate-500 dark:text-slate-400">{t('accountStatus')}</th>
                   <th className="px-4 py-3 text-start font-semibold text-slate-500 dark:text-slate-400 whitespace-nowrap">{t('lastLogin')}</th>
@@ -152,7 +151,7 @@ export default function UserManagement() {
               <tbody>
                 {users.length === 0 && (
                   <tr>
-                    <td colSpan={6} className="px-4 py-8 text-center text-slate-400">
+                    <td colSpan={5} className="px-4 py-8 text-center text-slate-400">
                       —
                     </td>
                   </tr>
@@ -163,7 +162,6 @@ export default function UserManagement() {
                       {u.username}
                       {u.id === currentUser.id && <span className="ms-2 text-xs text-brand-600 dark:text-brand-400">(you)</span>}
                     </td>
-                    <td className="px-4 py-3 text-slate-600 dark:text-slate-300 whitespace-nowrap">{u.email || '—'}</td>
                     <td className="px-4 py-3 whitespace-nowrap">
                       {editingUser?.id === u.id ? (
                         <select

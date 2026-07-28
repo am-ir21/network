@@ -22,7 +22,7 @@ export function AuthProvider({ children }) {
     try {
       const { data, error } = await supabase
         .from('users')
-        .select('id, username, email, password, role, is_active')
+        .select('id, username, password, role, is_active')
         .eq('username', username.trim())
         .maybeSingle()
 
@@ -41,7 +41,6 @@ export function AuthProvider({ children }) {
       const sessionUser = {
         id: data.id,
         username: data.username,
-        email: data.email,
         role: data.role,
       }
       localStorage.setItem(SESSION_KEY, JSON.stringify(sessionUser))
