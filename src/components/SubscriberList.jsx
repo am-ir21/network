@@ -26,7 +26,7 @@ const STATUS_STYLES = {
 
 export default function SubscriberList({ subscribers, setSubscribers, payments, onPaymentRecorded }) {
   const { t } = useLanguage()
-  const { isAdmin } = useAuth()
+  const { canEdit, canDelete } = useAuth()
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState('all')
   const [payingFor, setPayingFor] = useState(null)
@@ -194,7 +194,7 @@ export default function SubscriberList({ subscribers, setSubscribers, payments, 
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2 flex-wrap">
-                        {s.status !== 'green' && (
+                        {s.status !== 'green' && canEdit && (
                           <button
                             onClick={() => setPayingFor(s)}
                             className="text-xs font-medium px-2.5 py-1 rounded-lg bg-brand-600 text-white hover:bg-brand-700 transition-colors"
@@ -205,7 +205,7 @@ export default function SubscriberList({ subscribers, setSubscribers, payments, 
                         {undo && (
                           <UndoButton payment={undo} onUndone={handleUndone} onExpire={handleExpire} />
                         )}
-                        {isAdmin && (
+                        {canDelete && (
                           <button
                             onClick={() => setDeletingId(s.id)}
                             className="text-xs font-medium px-2.5 py-1 rounded-lg border border-red-200 dark:border-red-900 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40 transition-colors"

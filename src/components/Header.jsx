@@ -3,10 +3,17 @@ import { useAuth } from '../context/AuthContext'
 import { useTheme } from '../context/ThemeContext'
 import { useLanguage } from '../context/LanguageContext'
 
-export default function Header() {
-  const { user, logout } = useAuth()
+export default function Header({ onNavigate }) {
+  const { user, logout, canManageUsers } = useAuth()
   const { theme, toggleTheme } = useTheme()
   const { t, lang, toggleLang } = useLanguage()
+
+  const roleLabel = (role) => {
+    if (role === 'admin') return t('roleAdmin')
+    if (role === 'data_entry') return t('roleDataEntry')
+    if (role === 'viewer') return t('roleViewer')
+    return role
+  }
 
   return (
     <header className="sticky top-0 z-30 bg-white/80 dark:bg-slate-900/80 backdrop-blur border-b border-slate-200 dark:border-slate-800">
@@ -19,12 +26,24 @@ export default function Header() {
             <h1 className="text-lg font-bold leading-tight text-slate-900 dark:text-white">{t('appName')}</h1>
             <p className="text-xs text-slate-500 dark:text-slate-400 leading-tight">
               {t('loggedInAs')}: <span className="font-medium">{user?.username}</span> ·{' '}
-              {user?.role === 'admin' ? t('admin') : t('collector')}
+              {roleLabel(user?.role)}
             </p>
           </div>
         </div>
 
         <div className="flex items-center gap-2">
+          {canManageUsers && (
+            <button
+              onClick={() => onNavigate?.('users')}
+              className="text-xs sm:text-sm font-medium px-3 py-1.5 rounded-lg bg-brand-50 dark:bg-brand-900/30 text-brand-700 dark:text-brand-300 hover:bg-brand-100 dark:hover:bg-brand-900/50 transition-colors flex items-center gap-1.5"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                <path d="M9 6a3 3 0 11-6 0 3 3 0 016 0zM17 6a3 3 0 11-6 0 3 3 0 016 0zM12.93 17c.046-.327.07-.66.07-1a6.97 6.97 0 00-1.5-4.33A5 5 0 0119 16.5V18h-6v-1h-.07zM4.5 13a4.5 4.5 0 014.5 4.5V18H0v-.5A4.5 4.5 0 014.5 13z" />
+              </svg>
+              <span className="hidden sm:inline">{t('manageUsers')}</span>
+            </button>
+          )}
+
           <button
             onClick={toggleLang}
             className="text-xs sm:text-sm font-medium px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"

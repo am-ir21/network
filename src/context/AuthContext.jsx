@@ -22,7 +22,7 @@ export function AuthProvider({ children }) {
     try {
       const { data, error } = await supabase
         .from('users')
-        .select('id, username, password, role')
+        .select('id, username, email, password, role, is_active')
         .eq('username', username.trim())
         .maybeSingle()
 
@@ -33,9 +33,26 @@ export function AuthProvider({ children }) {
         return false
       }
 
-      const sessionUser = { id: data.id, username: data.username, role: data.role }
+      if (data.is_active === false) {
+        setAuthError('disabled')
+        return false
+      }
+
+      const sessionUser = {
+        id: data.id,
+        username: data.username,
+        email: data.email,
+        role: data.role,
+      }
       localStorage.setItem(SESSION_KEY, JSON.stringify(sessionUser))
       setUser(sessionUser)
+
+      supabase
+        .from('users')
+        .update({ last_login: new Date().toISOString() })
+        .eq('id', data.id)
+        .then(() => {})
+
       return true
     } catch (err) {
       console.error('Login error:', err)
@@ -51,8 +68,26 @@ export function AuthProvider({ children }) {
     setUser(null)
   }
 
+  const role = user?.role
+  const isAdmin = role === 'admin'
+  const canDelete = role === 'admin'
+  const canEdit = role === 'admin' || role === 'data_entry'
+  const canManageUsers = role === 'admin'
+
   return (
-    <AuthContext.Provider value={{ user, login, logout, authLoading, authError, isAdmin: user?.role === 'admin' }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        login,
+        logout,
+        authLoading,
+        authError,
+        isAdmin,
+        canDelete,
+        canEdit,
+        canManageUsers,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   )
