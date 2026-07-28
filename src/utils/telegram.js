@@ -1,8 +1,7 @@
 import { formatIQD } from './currency'
 
-// Replace these with your actual Telegram bot token and chat id.
-const YOUR_BOT_TOKEN = 'YOUR_BOT_TOKEN'
-const YOUR_CHAT_ID = 'YOUR_CHAT_ID'
+const BOT_TOKEN = import.meta.env.VITE_TELEGRAM_BOT_TOKEN
+const CHAT_ID = import.meta.env.VITE_TELEGRAM_CHAT_ID
 
 /**
  * Sends a notification to a Telegram chat whenever a payment is recorded.
@@ -10,23 +9,26 @@ const YOUR_CHAT_ID = 'YOUR_CHAT_ID'
  * the payment flow in the app.
  */
 export async function notifyTelegram(amount, subscriberName) {
-  if (YOUR_BOT_TOKEN === 'YOUR_BOT_TOKEN' || YOUR_CHAT_ID === 'YOUR_CHAT_ID') {
-    console.warn('Telegram not configured — set YOUR_BOT_TOKEN / YOUR_CHAT_ID in src/utils/telegram.js')
+  if (!BOT_TOKEN || !CHAT_ID) {
+    console.warn('Telegram not configured — set VITE_TELEGRAM_BOT_TOKEN and VITE_TELEGRAM_CHAT_ID in your .env file')
     return
   }
 
   const text = `Received ${formatIQD(amount)} from ${subscriberName}`
 
   try {
-    const url = `https://api.telegram.org/bot${YOUR_BOT_TOKEN}/sendMessage`
-    await fetch(url, {
+    const url = `https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`
+    const res = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        chat_id: YOUR_CHAT_ID,
+        chat_id: CHAT_ID,
         text,
       }),
     })
+    if (!res.ok) {
+      console.error('Telegram API returned error status:', res.status)
+    }
   } catch (err) {
     console.error('Telegram notification failed:', err)
   }
