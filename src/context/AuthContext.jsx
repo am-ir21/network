@@ -1,95 +1,90 @@
-import React, { createContext, useContext, useState } from 'react'
+import { createContext, useContext, useState, useEffect, useCallback } from 'react'
 import { supabase } from '../supabaseClient'
 
 const AuthContext = createContext(null)
+
 const SESSION_KEY = 'subtrack_session'
 
 export function AuthProvider({ children }) {
-  const [user, setUser] = useState(() => {
-    try {
-      const raw = localStorage.getItem(SESSION_KEY)
-      return raw ? JSON.parse(raw) : null
-    } catch {
-      return null
+  const [user, setUser] = useState(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    const stored = localStorage.getItem(SESSION_KEY)
+    if (stored) {
+      try {
+        const parsed = JSON.parse(stored)
+        if (parsed && parsed.id && parsed.username && parsed.role) {
+          setUser(parsed)
+        }
+      } catch {
+        localStorage.removeItem(SESSION_KEY)
+      }
     }
-  })
-  const [authLoading, setAuthLoading] = useState(false)
-  const [authError, setAuthError] = useState('')
+    setLoading(false)
+  }, [])
 
-  const login = async (username, password) => {
-    setAuthLoading(true)
-    setAuthError('')
-    try {
-      const { data, error } = await supabase
-        .from('users')
-        .select('id, username, password, role, is_active')
-        .eq('username', username.trim())
-        .maybeSingle()
+  const login = useCallback(async (username, password) => {
+    const { data, error } = await supabase
+      .from('users')
+      .select('id, username, role, is_active')
+      .eq('username', username)
+      .eq('password', password)
+      .maybeSingle()
 
-      if (error) throw error
-
-      if (!data || data.password !== password) {
-        setAuthError('invalid')
-        return false
-      }
-
-      if (data.is_active === false) {
-        setAuthError('disabled')
-        return false
-      }
-
-      const sessionUser = {
-        id: data.id,
-        username: data.username,
-        role: data.role,
-      }
-      localStorage.setItem(SESSION_KEY, JSON.stringify(sessionUser))
-      setUser(sessionUser)
-
-      supabase
-        .from('users')
-        .update({ last_login: new Date().toISOString() })
-        .eq('id', data.id)
-        .then(() => {})
-
-      return true
-    } catch (err) {
-      console.error('Login error:', err)
-      setAuthError('invalid')
-      return false
-    } finally {
-      setAuthLoading(false)
+    if (error) {
+      return { success: false, error: 'حدث خطأ في الاتصال بقاعدة البيانات' }
     }
-  }
 
-  const logout = () => {
+    if (!data) {
+      return { success: false, error: 'اسم المستخدم أو كلمة المرور غير صحيحة' }
+    }
+
+    if (data.is_active === false) {
+      return { success: false, error: 'هذا الحساب معطل. يرجى الاتصال بالمدير' }
+    }
+
+    const session = {
+      id: data.id,
+      username: data.username,
+      role: data.role,
+    }
+
+    localStorage.setItem(SESSION_KEY, JSON.stringify(session))
+    setUser(session)
+
+    await supabase
+      .from('users')
+      .update({ last_login: new Date().toISOString() })
+      .eq('id', data.id)
+
+    return { success: true }
+  }, [])
+
+  const logout = useCallback(() => {
     localStorage.removeItem(SESSION_KEY)
     setUser(null)
+  }, [])
+
+  const isAdmin = user?.role === 'admin'
+  const isDataEntry = user?.role === 'data_entry'
+  const isViewer = user?.role === 'viewer'
+
+  const value = {
+    user,
+    loading,
+    login,
+    logout,
+    isAdmin,
+    isDataEntry,
+    isViewer,
+    canDelete: isAdmin,
+    canManageUsers: isAdmin,
+    canEdit: isAdmin || isDataEntry,
+    canPay: isAdmin || isDataEntry,
   }
 
-  const role = user?.role
-  const isAdmin = role === 'admin'
-  const canDelete = role === 'admin'
-  const canEdit = role === 'admin' || role === 'data_entry'
-  const canManageUsers = role === 'admin'
-
-  return (
-    <AuthContext.Provider
-      value={{
-        user,
-        login,
-        logout,
-        authLoading,
-        authError,
-        isAdmin,
-        canDelete,
-        canEdit,
-        canManageUsers,
-      }}
-    >
-      {children}
-    </AuthContext.Provider>
-  )
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }
 
 export function useAuth() {

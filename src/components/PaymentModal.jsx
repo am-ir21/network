@@ -1,130 +1,297 @@
-import React, { useState } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../supabaseClient'
-import { useLanguage } from '../context/LanguageContext'
 import { useAuth } from '../context/AuthContext'
-import { formatIQD } from '../utils/currency'
-import { notifyTelegram } from '../utils/telegram'
+import { calculateStatus, calculateRemaining, formatCurrency } from '../utils/currency'
+import { notifyPayment, notifyUndo } from '../utils/telegram'
 
-export default function PaymentModal({ subscriber, onClose, onPaid }) {
-  const { t } = useLanguage()
-  const { user } = useAuth()
-  const remaining = Math.max(0, subscriber.subscription_fee - subscriber.paid_amount)
+const UNDO_WINDOW_MS = 5 * 60 * 1000
+
+export default function PaymentModal({ subscriber, onClose, onUpdated }) {
+  const { user, canPay } = useAuth()
   const [amount, setAmount] = useState('')
-  const [saving, setSaving] = useState(false)
+  const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [lastPayment, setLastPayment] = useState(null)
+  const [undoTimeLeft, setUndoTimeLeft] = useState(0)
 
-  const handlePayFull = () => {
-    setAmount(String(remaining))
+  const remaining = calculateRemaining(subscriber)
+  const fee = Number(subscriber?.subscription_fee) || 0
+  const paid = Number(subscriber?.paid_amount) || 0
+
+  useEffect(() => {
+    if (!lastPayment) return
+
+    const interval = setInterval(() => {
+      const elapsed = Date.now() - lastPayment.timestamp
+      const left = UNDO_WINDOW_MS - elapsed
+      if (left <= 0) {
+        setUndoTimeLeft(0)
+        setLastPayment(null)
+        clearInterval(interval)
+      } else {
+        setUndoTimeLeft(left)
+      }
+    }, 1000)
+
+    return () => clearInterval(interval)
+  }, [lastPayment])
+
+  const recordPayment = useCallback(async (paymentAmount) => {
+    const newPaidAmount = paid + paymentAmount
+    const newStatus = calculateStatus({ subscription_fee: fee, paid_amount: newPaidAmount })
+
+    const { error: updateError } = await supabase
+      .from('subscribers')
+      .update({
+        paid_amount: newPaidAmount,
+        status: newStatus,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', subscriber.id)
+
+    if (updateError) throw updateError
+
+    const { error: historyError } = await supabase
+      .from('payment_history')
+      .insert({
+        subscriber_id: subscriber.id,
+        collector_id: user?.id || null,
+        amount_paid: paymentAmount,
+        previous_paid_amount: paid,
+        previous_status: subscriber.status,
+      })
+
+    if (historyError) {
+      console.warn('Failed to record payment history:', historyError.message)
+    }
+
+    const newRemaining = Math.max(0, fee - newPaidAmount)
+    await notifyPayment(subscriber.name, paymentAmount, newRemaining, user?.username)
+
+    setLastPayment({
+      timestamp: Date.now(),
+      amount: paymentAmount,
+      previousPaid: paid,
+      previousStatus: subscriber.status,
+    })
+
+    onUpdated({
+      ...subscriber,
+      paid_amount: newPaidAmount,
+      status: newStatus,
+    })
+  }, [subscriber, paid, fee, user, onUpdated])
+
+  const handleFullPay = async () => {
+    if (!canPay) return
     setError('')
-  }
+    setLoading(true)
 
-  const handleSubmit = async (e) => {
-    e.preventDefault()
-    const num = Number(amount)
-    if (!amount || isNaN(num) || num <= 0) {
-      setError(t('invalidAmount'))
+    const paymentAmount = remaining
+    if (paymentAmount <= 0) {
+      setError('لا يوجد مبلغ متبقي للدفع')
+      setLoading(false)
       return
     }
 
-    setSaving(true)
-    setError('')
     try {
-      const { data, error: insertError } = await supabase
-        .from('payment_history')
-        .insert({
-          subscriber_id: subscriber.id,
-          collector_id: user?.id ?? null,
-          amount_paid: num,
-        })
-        .select()
-        .single()
-
-      if (insertError) throw insertError
-
-      // Fetch the updated subscriber row (trigger already updated it server-side).
-      const { data: updatedSub, error: fetchError } = await supabase
-        .from('subscribers')
-        .select('*')
-        .eq('id', subscriber.id)
-        .single()
-
-      if (fetchError) throw fetchError
-
-      notifyTelegram(num, subscriber.name)
-
-      onPaid(updatedSub, data)
-      onClose()
+      await recordPayment(paymentAmount)
     } catch (err) {
-      console.error(err)
-      setError(err.message || 'Error')
-    } finally {
-      setSaving(false)
+      setError('حدث خطأ: ' + err.message)
     }
+    setLoading(false)
+  }
+
+  const handlePartialPay = async (e) => {
+    e.preventDefault()
+    if (!canPay) return
+    setError('')
+
+    const paymentAmount = parseFloat(amount) || 0
+    if (paymentAmount <= 0) {
+      setError('يرجى إدخال مبلغ صحيح')
+      return
+    }
+    if (paymentAmount > remaining) {
+      setError('المبلغ يتجاوز المتبقي')
+      return
+    }
+
+    setLoading(true)
+    try {
+      await recordPayment(paymentAmount)
+      setAmount('')
+    } catch (err) {
+      setError('حدث خطأ: ' + err.message)
+    }
+    setLoading(false)
+  }
+
+  const handleUndo = async () => {
+    if (!lastPayment) return
+    setError('')
+    setLoading(true)
+
+    try {
+      const { error: undoError } = await supabase
+        .from('subscribers')
+        .update({
+          paid_amount: lastPayment.previousPaid,
+          status: lastPayment.previousStatus,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', subscriber.id)
+
+      if (undoError) throw undoError
+
+      const { data: recentHistory } = await supabase
+        .from('payment_history')
+        .select('id')
+        .eq('subscriber_id', subscriber.id)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+
+      if (recentHistory) {
+        await supabase.from('payment_history').delete().eq('id', recentHistory.id)
+      }
+
+      await notifyUndo(subscriber.name, lastPayment.previousPaid, lastPayment.previousStatus)
+
+      setLastPayment(null)
+      setUndoTimeLeft(0)
+
+      onUpdated({
+        ...subscriber,
+        paid_amount: lastPayment.previousPaid,
+        status: lastPayment.previousStatus,
+      })
+    } catch (err) {
+      setError('حدث خطأ في التراجع: ' + err.message)
+    }
+    setLoading(false)
+  }
+
+  const formatTimeLeft = (ms) => {
+    const seconds = Math.ceil(ms / 1000)
+    const mins = Math.floor(seconds / 60)
+    const secs = seconds % 60
+    return `${mins}:${String(secs).padStart(2, '0')}`
+  }
+
+  const statusColors = {
+    red: 'bg-danger-500/20 text-danger-300 border-danger-500/30',
+    yellow: 'bg-warning-500/20 text-warning-300 border-warning-500/30',
+    green: 'bg-success-500/20 text-success-300 border-success-500/30',
+  }
+
+  const statusLabels = {
+    red: 'غير مسدد',
+    yellow: 'جزئي',
+    green: 'مسدد بالكامل',
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 modal-backdrop px-4" onClick={onClose}>
-      <div
-        className="w-full max-w-sm bg-white dark:bg-slate-900 rounded-2xl shadow-2xl p-6 modal-panel"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-1">{t('recordPayment')}</h3>
-        <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">{subscriber.name}</p>
-
-        <div className="grid grid-cols-2 gap-3 mb-4 text-sm">
-          <div className="rounded-xl bg-slate-50 dark:bg-slate-800 p-3">
-            <p className="text-slate-500 dark:text-slate-400 mb-0.5">{t('fee')}</p>
-            <p className="font-semibold text-slate-900 dark:text-white">{formatIQD(subscriber.subscription_fee)}</p>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-slate-900/70 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative w-full max-w-md bg-slate-800 rounded-2xl border border-white/10 shadow-2xl animate-slide-up">
+        <div className="flex items-center justify-between p-6 border-b border-white/10">
+          <div>
+            <h2 className="text-xl font-bold text-white">{subscriber.name}</h2>
+            <span className={`inline-block mt-1 px-2 py-0.5 rounded-md text-xs font-medium border ${statusColors[subscriber.status]}`}>
+              {statusLabels[subscriber.status]}
+            </span>
           </div>
-          <div className="rounded-xl bg-slate-50 dark:bg-slate-800 p-3">
-            <p className="text-slate-500 dark:text-slate-400 mb-0.5">{t('remaining')}</p>
-            <p className="font-semibold text-slate-900 dark:text-white">{formatIQD(remaining)}</p>
-          </div>
+          <button onClick={onClose} className="text-slate-400 hover:text-white transition-colors">
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-slate-600 dark:text-slate-300 mb-1">{t('amount')}</label>
-            <div className="flex gap-2">
-              <input
-                type="number"
-                min="0"
-                step="any"
-                value={amount}
-                onChange={(e) => setAmount(e.target.value)}
-                placeholder={t('enterAmount')}
-                autoFocus
-                className="flex-1 min-w-0 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-4 py-2.5 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
-              />
-              <button
-                type="button"
-                onClick={handlePayFull}
-                className="shrink-0 rounded-xl bg-brand-100 dark:bg-brand-900/40 text-brand-700 dark:text-brand-300 font-semibold px-3 text-sm hover:bg-brand-200 dark:hover:bg-brand-900/70 transition-colors"
-              >
-                {t('payFull')}
-              </button>
+        <div className="p-6 space-y-5">
+          <div className="grid grid-cols-3 gap-3">
+            <div className="bg-slate-700/30 rounded-xl p-3 text-center">
+              <p className="text-xs text-slate-400 mb-1">رسوم الاشتراك</p>
+              <p className="text-lg font-bold text-white">{formatCurrency(fee)}</p>
+            </div>
+            <div className="bg-slate-700/30 rounded-xl p-3 text-center">
+              <p className="text-xs text-slate-400 mb-1">المدفوع</p>
+              <p className="text-lg font-bold text-success-300">{formatCurrency(paid)}</p>
+            </div>
+            <div className="bg-slate-700/30 rounded-xl p-3 text-center">
+              <p className="text-xs text-slate-400 mb-1">المتبقي</p>
+              <p className="text-lg font-bold text-warning-300">{formatCurrency(remaining)}</p>
             </div>
           </div>
 
-          {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
+          {canPay && remaining > 0 && (
+            <button
+              onClick={handleFullPay}
+              disabled={loading}
+              className="w-full py-3 bg-success-600 hover:bg-success-700 disabled:opacity-50 text-white font-semibold rounded-xl transition-all shadow-lg shadow-success-600/20"
+            >
+              {loading ? 'جاري المعالجة...' : `تسديد المبلغ كاملاً (${formatCurrency(remaining)})`}
+            </button>
+          )}
 
-          <div className="flex gap-2 pt-2">
-            <button
-              type="button"
-              onClick={onClose}
-              className="flex-1 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-medium py-2.5 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
-            >
-              {t('cancel')}
-            </button>
-            <button
-              type="submit"
-              disabled={saving}
-              className="flex-1 rounded-xl bg-brand-600 hover:bg-brand-700 disabled:opacity-60 text-white font-semibold py-2.5 transition-colors"
-            >
-              {t('save')}
-            </button>
-          </div>
-        </form>
+          {canPay && remaining > 0 && (
+            <form onSubmit={handlePartialPay} className="space-y-3">
+              <div className="flex gap-2">
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={amount}
+                  onChange={(e) => setAmount(e.target.value)}
+                  className="flex-1 px-4 py-3 bg-slate-700/50 border border-white/10 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-primary-500 transition-all"
+                  placeholder="مبلغ جزئي"
+                  disabled={loading}
+                />
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="px-6 py-3 bg-primary-600 hover:bg-primary-700 disabled:opacity-50 text-white font-semibold rounded-xl transition-all whitespace-nowrap"
+                >
+                  دفع جزئي
+                </button>
+              </div>
+            </form>
+          )}
+
+          {remaining <= 0 && (
+            <div className="bg-success-500/10 border border-success-500/30 rounded-xl px-4 py-3 text-success-200 text-center text-sm">
+              تم تسديد كامل المبلغ
+            </div>
+          )}
+
+          {lastPayment && undoTimeLeft > 0 && (
+            <div className="bg-warning-500/10 border border-warning-500/30 rounded-xl p-4 animate-slide-up">
+              <div className="flex items-center justify-between mb-3">
+                <div>
+                  <p className="text-sm text-warning-200 font-medium">تم تسجيل دفعة بمبلغ {formatCurrency(lastPayment.amount)}</p>
+                  <p className="text-xs text-slate-400 mt-1">يمكنك التراجع خلال {formatTimeLeft(undoTimeLeft)}</p>
+                </div>
+                <div className="text-warning-300 text-2xl font-mono font-bold">
+                  {formatTimeLeft(undoTimeLeft)}
+                </div>
+              </div>
+              <button
+                onClick={handleUndo}
+                disabled={loading}
+                className="w-full py-2.5 bg-warning-600 hover:bg-warning-700 disabled:opacity-50 text-white font-medium rounded-xl transition-all"
+              >
+                {loading ? 'جاري التراجع...' : 'تراجع عن العملية'}
+              </button>
+            </div>
+          )}
+
+          {error && (
+            <div className="bg-danger-500/10 border border-danger-500/30 rounded-xl px-4 py-3 text-danger-100 text-sm">
+              {error}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   )

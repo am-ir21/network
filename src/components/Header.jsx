@@ -1,79 +1,86 @@
-import React from 'react'
 import { useAuth } from '../context/AuthContext'
-import { useTheme } from '../context/ThemeContext'
-import { useLanguage } from '../context/LanguageContext'
 
-export default function Header({ onNavigate }) {
-  const { user, logout, canManageUsers } = useAuth()
-  const { theme, toggleTheme } = useTheme()
-  const { t, lang, toggleLang } = useLanguage()
+export default function Header({ onNavigate, activeView }) {
+  const { user, logout, isAdmin } = useAuth()
 
-  const roleLabel = (role) => {
-    if (role === 'admin') return t('roleAdmin')
-    if (role === 'data_entry') return t('roleDataEntry')
-    if (role === 'viewer') return t('roleViewer')
-    return role
+  const roleLabels = {
+    admin: 'مدير',
+    data_entry: 'موظف إدخال',
+    viewer: 'مشاهدة',
   }
 
   return (
-    <header className="sticky top-0 z-30 bg-white/80 dark:bg-slate-900/80 backdrop-blur border-b border-slate-200 dark:border-slate-800">
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <div className="h-9 w-9 rounded-xl bg-brand-600 text-white flex items-center justify-center font-bold shadow-sm">
-            ₪
+    <header className="sticky top-0 z-40 bg-slate-900/80 backdrop-blur-xl border-b border-white/10">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="flex items-center justify-between h-16">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-primary-600 rounded-xl flex items-center justify-center shadow-lg shadow-primary-600/20">
+              <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+              </svg>
+            </div>
+            <div>
+              <h1 className="text-lg font-bold text-white">SubTrack</h1>
+              <p className="text-xs text-slate-400">إدارة المشتركين</p>
+            </div>
           </div>
-          <div>
-            <h1 className="text-lg font-bold leading-tight text-slate-900 dark:text-white">{t('appName')}</h1>
-            <p className="text-xs text-slate-500 dark:text-slate-400 leading-tight">
-              {t('loggedInAs')}: <span className="font-medium">{user?.username}</span> ·{' '}
-              {roleLabel(user?.role)}
-            </p>
-          </div>
-        </div>
 
-        <div className="flex items-center gap-2">
-          {canManageUsers && (
-            <button
-              onClick={() => onNavigate?.('users')}
-              className="text-xs sm:text-sm font-medium px-3 py-1.5 rounded-lg bg-brand-50 dark:bg-brand-900/30 text-brand-700 dark:text-brand-300 hover:bg-brand-100 dark:hover:bg-brand-900/50 transition-colors flex items-center gap-1.5"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
-                <path d="M9 6a3 3 0 11-6 0 3 3 0 016 0zM17 6a3 3 0 11-6 0 3 3 0 016 0zM12.93 17c.046-.327.07-.66.07-1a6.97 6.97 0 00-1.5-4.33A5 5 0 0119 16.5V18h-6v-1h-.07zM4.5 13a4.5 4.5 0 014.5 4.5V18H0v-.5A4.5 4.5 0 014.5 13z" />
-              </svg>
-              <span className="hidden sm:inline">{t('manageUsers')}</span>
-            </button>
-          )}
-
-          <button
-            onClick={toggleLang}
-            className="text-xs sm:text-sm font-medium px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-            title={t('language')}
-          >
-            {lang === 'en' ? 'العربية' : 'English'}
-          </button>
-
-          <button
-            onClick={toggleTheme}
-            className="p-2 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-            title={theme === 'dark' ? t('lightMode') : t('darkMode')}
-          >
-            {theme === 'dark' ? (
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                <path d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 6.464A1 1 0 106.465 5.05l-.708-.707a1 1 0 00-1.414 1.414l.707.707zm1.414 8.486l-.707.707a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 1.414zM4 11a1 1 0 100-2H3a1 1 0 000 2h1z" />
-              </svg>
-            ) : (
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                <path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z" />
-              </svg>
+          <div className="flex items-center gap-2 sm:gap-4">
+            {isAdmin && (
+              <button
+                onClick={() => onNavigate('users')}
+                className={`px-3 sm:px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                  activeView === 'users'
+                    ? 'bg-primary-600 text-white'
+                    : 'text-slate-300 hover:bg-white/5 hover:text-white'
+                }`}
+              >
+                <span className="flex items-center gap-2">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+                  </svg>
+                  <span className="hidden sm:inline">إدارة المستخدمين</span>
+                  <span className="sm:hidden">المستخدمون</span>
+                </span>
+              </button>
             )}
-          </button>
 
-          <button
-            onClick={logout}
-            className="text-xs sm:text-sm font-medium px-3 py-1.5 rounded-lg bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-950/70 transition-colors"
-          >
-            {t('logout')}
-          </button>
+            <button
+              onClick={() => onNavigate('dashboard')}
+              className={`px-3 sm:px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                activeView === 'dashboard'
+                  ? 'bg-primary-600 text-white'
+                  : 'text-slate-300 hover:bg-white/5 hover:text-white'
+              }`}
+            >
+              <span className="flex items-center gap-2">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+                </svg>
+                <span className="hidden sm:inline">لوحة التحكم</span>
+                <span className="sm:hidden">الرئيسية</span>
+              </span>
+            </button>
+
+            <div className="flex items-center gap-3 pr-3 sm:pr-4 border-r border-white/10">
+              <div className="text-right hidden sm:block">
+                <p className="text-sm font-medium text-white">{user?.username}</p>
+                <p className="text-xs text-slate-400">{roleLabels[user?.role] || user?.role}</p>
+              </div>
+              <div className="w-9 h-9 bg-primary-600/20 border border-primary-500/30 rounded-full flex items-center justify-center text-primary-300 font-semibold text-sm">
+                {user?.username?.charAt(0)?.toUpperCase()}
+              </div>
+              <button
+                onClick={logout}
+                className="p-2 text-slate-400 hover:text-danger-400 hover:bg-danger-500/10 rounded-lg transition-all"
+                title="تسجيل الخروج"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                </svg>
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     </header>

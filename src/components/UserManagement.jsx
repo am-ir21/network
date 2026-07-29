@@ -1,38 +1,28 @@
-import React, { useEffect, useState, useCallback } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../supabaseClient'
-import { useLanguage } from '../context/LanguageContext'
-import { useAuth } from '../context/AuthContext'
 import AddUserModal from './AddUserModal'
 
-const ROLE_STYLES = {
-  admin: 'bg-brand-100 text-brand-700 dark:bg-brand-900/40 dark:text-brand-300',
-  data_entry: 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300',
-  viewer: 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300',
-}
-
 export default function UserManagement() {
-  const { t } = useLanguage()
-  const { user: currentUser } = useAuth()
   const [users, setUsers] = useState([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
   const [showAddModal, setShowAddModal] = useState(false)
-  const [editingUser, setEditingUser] = useState(null)
-  const [editRole, setEditRole] = useState('')
-  const [deletingId, setDeletingId] = useState(null)
-  const [message, setMessage] = useState('')
-
-  const showMessage = useCallback((msg) => {
-    setMessage(msg)
-    setTimeout(() => setMessage(''), 3000)
-  }, [])
 
   const fetchUsers = useCallback(async () => {
     setLoading(true)
-    const { data, error } = await supabase
-      .from('users')
-      .select('id, username, role, is_active, last_login, created_at')
-      .order('created_at', { ascending: true })
-    if (!error) setUsers(data || [])
+    setError('')
+
+    try {
+      const { data, error: fetchError } = await supabase
+        .from('users')
+        .select('id, username, role, is_active, created_at, last_login')
+        .order('created_at', { ascending: false })
+
+      if (fetchError) throw fetchError
+      setUsers(data || [])
+    } catch (err) {
+      setError('فشل في جلب المستخدمين: ' + err.message)
+    }
     setLoading(false)
   }, [])
 
@@ -40,241 +30,173 @@ export default function UserManagement() {
     fetchUsers()
   }, [fetchUsers])
 
-  const roleLabel = (role) => {
-    if (role === 'admin') return t('roleAdmin')
-    if (role === 'data_entry') return t('roleDataEntry')
-    if (role === 'viewer') return t('roleViewer')
-    return role
-  }
+  const toggleActive = async (userId, currentActive) => {
+    try {
+      const { error: updateError } = await supabase
+        .from('users')
+        .update({ is_active: !currentActive })
+        .eq('id', userId)
 
-  const startEdit = (u) => {
-    setEditingUser(u)
-    setEditRole(u.role)
-  }
+      if (updateError) throw updateError
 
-  const saveEdit = async () => {
-    if (!editingUser) return
-    const { error } = await supabase
-      .from('users')
-      .update({ role: editRole })
-      .eq('id', editingUser.id)
-    if (error) {
-      showMessage(error.message)
-    } else {
-      showMessage(t('userUpdated'))
-      setUsers((prev) => prev.map((u) => (u.id === editingUser.id ? { ...u, role: editRole } : u)))
-      setEditingUser(null)
+      setUsers((prev) =>
+        prev.map((u) => (u.id === userId ? { ...u, is_active: !currentActive } : u))
+      )
+    } catch (err) {
+      setError('فشل في تحديث حالة المستخدم: ' + err.message)
     }
   }
 
-  const toggleActive = async (u) => {
-    if (u.id === currentUser.id) {
-      showMessage(t('cannotDisableSelf'))
-      return
-    }
-    const { error } = await supabase
-      .from('users')
-      .update({ is_active: !u.is_active })
-      .eq('id', u.id)
-    if (error) {
-      showMessage(error.message)
-    } else {
-      setUsers((prev) => prev.map((x) => (x.id === u.id ? { ...x, is_active: !u.is_active } : x)))
+  const changeRole = async (userId, newRole) => {
+    try {
+      const { error: updateError } = await supabase
+        .from('users')
+        .update({ role: newRole })
+        .eq('id', userId)
+
+      if (updateError) throw updateError
+
+      setUsers((prev) =>
+        prev.map((u) => (u.id === userId ? { ...u, role: newRole } : u))
+      )
+    } catch (err) {
+      setError('فشل في تغيير الدور: ' + err.message)
     }
   }
 
-  const handleDelete = async () => {
-    if (!deletingId) return
-    if (deletingId === currentUser.id) {
-      showMessage(t('cannotDeleteSelf'))
-      setDeletingId(null)
-      return
+  const deleteUser = async (userId) => {
+    if (!confirm('هل أنت متأكد من حذف هذا المستخدم؟')) return
+
+    try {
+      const { error: deleteError } = await supabase
+        .from('users')
+        .delete()
+        .eq('id', userId)
+
+      if (deleteError) throw deleteError
+
+      setUsers((prev) => prev.filter((u) => u.id !== userId))
+    } catch (err) {
+      setError('فشل في حذف المستخدم: ' + err.message)
     }
-    const { error } = await supabase.from('users').delete().eq('id', deletingId)
-    if (error) {
-      showMessage(error.message)
-    } else {
-      showMessage(t('userDeleted'))
-      setUsers((prev) => prev.filter((u) => u.id !== deletingId))
-    }
-    setDeletingId(null)
   }
 
-  const formatLogin = (ts) => {
-    if (!ts) return '—'
-    return new Date(ts).toLocaleString(undefined, {
-      year: 'numeric',
-      month: 'short',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: false,
-    })
+  const roleLabels = {
+    admin: 'مدير',
+    data_entry: 'موظف إدخال',
+    viewer: 'مشاهدة',
+  }
+
+  const roleColors = {
+    admin: 'bg-primary-500/20 text-primary-300 border-primary-500/30',
+    data_entry: 'bg-warning-500/20 text-warning-300 border-warning-500/30',
+    viewer: 'bg-slate-500/20 text-slate-300 border-slate-500/30',
   }
 
   return (
-    <div>
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="text-lg font-bold text-slate-900 dark:text-white">{t('usersManagement')}</h2>
-        <button
-          onClick={() => setShowAddModal(true)}
-          className="text-sm font-medium px-3 py-1.5 rounded-lg bg-brand-600 text-white hover:bg-brand-700 transition-colors flex items-center gap-1.5"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
-            <path d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" />
-          </svg>
-          {t('addUser')}
-        </button>
-      </div>
-
-      {message && (
-        <div className="mb-3 rounded-xl bg-brand-50 dark:bg-brand-900/30 border border-brand-200 dark:border-brand-800 px-4 py-2.5 text-sm text-brand-700 dark:text-brand-300">
-          {message}
-        </div>
-      )}
-
-      {loading ? (
-        <p className="text-slate-500 dark:text-slate-400">{t('loading')}</p>
-      ) : (
-        <div className="rounded-2xl border border-slate-100 dark:border-slate-800 overflow-hidden bg-white dark:bg-slate-900 shadow-sm">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-slate-100 dark:border-slate-800">
-                  <th className="px-4 py-3 text-start font-semibold text-slate-500 dark:text-slate-400">{t('usernameLabel')}</th>
-                  <th className="px-4 py-3 text-start font-semibold text-slate-500 dark:text-slate-400">{t('role')}</th>
-                  <th className="px-4 py-3 text-start font-semibold text-slate-500 dark:text-slate-400">{t('accountStatus')}</th>
-                  <th className="px-4 py-3 text-start font-semibold text-slate-500 dark:text-slate-400 whitespace-nowrap">{t('lastLogin')}</th>
-                  <th className="px-4 py-3 text-start font-semibold text-slate-500 dark:text-slate-400">{t('actions')}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {users.length === 0 && (
-                  <tr>
-                    <td colSpan={5} className="px-4 py-8 text-center text-slate-400">
-                      —
-                    </td>
-                  </tr>
-                )}
-                {users.map((u) => (
-                  <tr key={u.id} className="border-b border-slate-50 dark:border-slate-800/60 last:border-0">
-                    <td className="px-4 py-3 font-medium text-slate-900 dark:text-white whitespace-nowrap">
-                      {u.username}
-                      {u.id === currentUser.id && <span className="ms-2 text-xs text-brand-600 dark:text-brand-400">(you)</span>}
-                    </td>
-                    <td className="px-4 py-3 whitespace-nowrap">
-                      {editingUser?.id === u.id ? (
-                        <select
-                          value={editRole}
-                          onChange={(e) => setEditRole(e.target.value)}
-                          className="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-2 py-1 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-500"
-                        >
-                          <option value="admin">{t('roleAdmin')}</option>
-                          <option value="data_entry">{t('roleDataEntry')}</option>
-                          <option value="viewer">{t('roleViewer')}</option>
-                        </select>
-                      ) : (
-                        <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ${ROLE_STYLES[u.role] || ROLE_STYLES.viewer}`}>
-                          {roleLabel(u.role)}
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 whitespace-nowrap">
-                      <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ${u.is_active ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300' : 'bg-red-100 text-red-700 dark:bg-red-900/50 dark:text-red-300'}`}>
-                        <span className={`h-1.5 w-1.5 rounded-full ${u.is_active ? 'bg-emerald-500' : 'bg-red-500'}`} />
-                        {u.is_active ? t('active') : t('disabled')}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-slate-500 dark:text-slate-400 whitespace-nowrap text-xs">
-                      {formatLogin(u.last_login)}
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        {editingUser?.id === u.id ? (
-                          <>
-                            <button
-                              onClick={saveEdit}
-                              className="text-xs font-medium px-2.5 py-1 rounded-lg bg-brand-600 text-white hover:bg-brand-700 transition-colors"
-                            >
-                              {t('save')}
-                            </button>
-                            <button
-                              onClick={() => setEditingUser(null)}
-                              className="text-xs font-medium px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
-                            >
-                              {t('cancel')}
-                            </button>
-                          </>
-                        ) : (
-                          <>
-                            <button
-                              onClick={() => startEdit(u)}
-                              className="text-xs font-medium px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
-                            >
-                              {t('editUser')}
-                            </button>
-                            <button
-                              onClick={() => toggleActive(u)}
-                              disabled={u.id === currentUser.id}
-                              className="text-xs font-medium px-2.5 py-1 rounded-lg border border-amber-200 dark:border-amber-900 text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/40 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                            >
-                              {u.is_active ? t('deactivate') : t('activate')}
-                            </button>
-                            <button
-                              onClick={() => setDeletingId(u.id)}
-                              disabled={u.id === currentUser.id}
-                              className="text-xs font-medium px-2.5 py-1 rounded-lg border border-red-200 dark:border-red-900 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                            >
-                              {t('delete')}
-                            </button>
-                          </>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+    <div className="min-h-screen bg-slate-950">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-8 gap-4">
+          <div>
+            <h2 className="text-2xl font-bold text-white mb-2">إدارة المستخدمين</h2>
+            <p className="text-slate-400">إضافة وإدارة حسابات الموظفين والصلاحيات</p>
           </div>
+          <button
+            onClick={() => setShowAddModal(true)}
+            className="flex items-center gap-2 px-4 py-2.5 bg-primary-600 hover:bg-primary-700 text-white font-medium rounded-xl transition-all shadow-lg shadow-primary-600/20 text-sm whitespace-nowrap"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
+            إضافة مستخدم
+          </button>
         </div>
-      )}
+
+        {error && (
+          <div className="mb-4 bg-danger-500/10 border border-danger-500/30 rounded-xl px-4 py-3 text-danger-100 text-sm">
+            {error}
+          </div>
+        )}
+
+        <div className="bg-slate-800/30 border border-white/5 rounded-2xl overflow-hidden">
+          {loading ? (
+            <div className="p-12 flex items-center justify-center">
+              <div className="w-8 h-8 border-2 border-primary-500 border-t-transparent rounded-full animate-spin"></div>
+            </div>
+          ) : users.length === 0 ? (
+            <div className="p-12 text-center text-slate-400">لا يوجد مستخدمون</div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-white/5">
+                    <th className="text-right px-4 py-3 text-xs font-medium text-slate-400 uppercase tracking-wider">اسم المستخدم</th>
+                    <th className="text-right px-4 py-3 text-xs font-medium text-slate-400 uppercase tracking-wider">الدور</th>
+                    <th className="text-right px-4 py-3 text-xs font-medium text-slate-400 uppercase tracking-wider hidden sm:table-cell">الحالة</th>
+                    <th className="text-right px-4 py-3 text-xs font-medium text-slate-400 uppercase tracking-wider hidden sm:table-cell">آخر دخول</th>
+                    <th className="text-right px-4 py-3 text-xs font-medium text-slate-400 uppercase tracking-wider">إجراءات</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-white/5">
+                  {users.map((u) => (
+                    <tr key={u.id} className="hover:bg-white/5 transition-colors">
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 bg-primary-600/20 border border-primary-500/30 rounded-full flex items-center justify-center text-primary-300 font-semibold text-xs">
+                            {u.username?.charAt(0)?.toUpperCase()}
+                          </div>
+                          <span className="text-sm font-medium text-white">{u.username}</span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <select
+                          value={u.role}
+                          onChange={(e) => changeRole(u.id, e.target.value)}
+                          className={`px-2.5 py-1 rounded-md text-xs font-medium border cursor-pointer ${roleColors[u.role]} bg-transparent focus:outline-none focus:ring-1 focus:ring-primary-500`}
+                        >
+                          <option value="admin" className="bg-slate-800">مدير</option>
+                          <option value="data_entry" className="bg-slate-800">موظف إدخال</option>
+                          <option value="viewer" className="bg-slate-800">مشاهدة</option>
+                        </select>
+                      </td>
+                      <td className="px-4 py-3 hidden sm:table-cell">
+                        <button
+                          onClick={() => toggleActive(u.id, u.is_active)}
+                          className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${u.is_active ? 'bg-success-600' : 'bg-slate-600'}`}
+                        >
+                          <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${u.is_active ? 'translate-x-6' : 'translate-x-1'}`} />
+                        </button>
+                      </td>
+                      <td className="px-4 py-3 text-sm text-slate-400 hidden sm:table-cell">
+                        {u.last_login ? new Date(u.last_login).toLocaleDateString('ar') : '—'}
+                      </td>
+                      <td className="px-4 py-3">
+                        <button
+                          onClick={() => deleteUser(u.id)}
+                          className="p-1.5 bg-danger-500/10 hover:bg-danger-500/20 text-danger-400 rounded-lg transition-all"
+                          title="حذف"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                          </svg>
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </div>
 
       {showAddModal && (
         <AddUserModal
           onClose={() => setShowAddModal(false)}
           onAdded={(newUser) => {
-            setUsers((prev) => [...prev, newUser])
-            showMessage(t('userAdded'))
+            setUsers((prev) => [newUser, ...prev])
           }}
         />
-      )}
-
-      {deletingId && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 modal-backdrop px-4"
-          onClick={() => setDeletingId(null)}
-        >
-          <div
-            className="w-full max-w-sm bg-white dark:bg-slate-900 rounded-2xl shadow-2xl p-6 modal-panel"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <p className="text-slate-700 dark:text-slate-200 mb-5">{t('confirmDeleteUser')}</p>
-            <div className="flex gap-2">
-              <button
-                onClick={() => setDeletingId(null)}
-                className="flex-1 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-medium py-2.5 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
-              >
-                {t('no')}
-              </button>
-              <button
-                onClick={handleDelete}
-                className="flex-1 rounded-xl bg-red-600 hover:bg-red-700 text-white font-semibold py-2.5 transition-colors"
-              >
-                {t('yes')}
-              </button>
-            </div>
-          </div>
-        </div>
       )}
     </div>
   )
