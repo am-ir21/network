@@ -31,7 +31,6 @@ export default function SubscriberList({ subscribers, setSubscribers, payments, 
   const [filter, setFilter] = useState('all')
   const [payingFor, setPayingFor] = useState(null)
   const [deletingId, setDeletingId] = useState(null)
-  // Map of subscriberId -> { id, paymentRecordId, subscriberId, createdAt }
   const [activeUndos, setActiveUndos] = useState({})
 
   const paymentTimeMap = useMemo(() => {
@@ -194,7 +193,7 @@ export default function SubscriberList({ subscribers, setSubscribers, payments, 
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2 flex-wrap">
-                        {s.status !== 'green' && canEdit && (
+                        {canEdit && (
                           <button
                             onClick={() => setPayingFor(s)}
                             className="text-xs font-medium px-2.5 py-1 rounded-lg bg-brand-600 text-white hover:bg-brand-700 transition-colors"
